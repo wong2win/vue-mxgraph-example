@@ -41,8 +41,8 @@ export default {
       cursorPosition: null,
       updateZoomTimeout: null,
       cumulativeZoomFactor: 1,
-      oldScrollTop: 0,
-      oldScrollLeft: 0
+      // oldScrollTop: 0,
+      // oldScrollLeft: 0
     }
   },
   methods: {
@@ -69,25 +69,25 @@ export default {
       MxRubberBand.prototype.defaultOpacity = 30
       MxEvent.disableContextMenu(this.container)
 
-      this.graph.setPanning(true)
+      // this.graph.setPanning(true)
       this.graph.pageScale = GRAPH_CONFIG['scale']
       this.graph.pageScale = GRAPH_CONFIG['scale']
       this.graph.gridSize = GRAPH_CONFIG['gridSize']
       this.graph.gridEnabled = GRAPH_CONFIG['gridEnabled']
       this.graph.setPanning = true
       this.setPageFormat()
-
+      // 依赖注入及方法重写...
       graphUtility(this)
-
+      // 
       this.graph.view.validate()
       this.graph.sizeDidChange()
 
       resetScrollbars(this)
 
-      this.graph.container.addEventListener('scroll', () => {
-        this.oldScrollTop = this.graph.container.scrollTop
-        this.oldScrollLeft = this.graph.container.scrollLeft
-      }, true)
+      // this.graph.container.addEventListener('scroll', () => {
+      //   this.oldScrollTop = this.graph.container.scrollTop
+      //   this.oldScrollLeft = this.graph.container.scrollLeft
+      // }, true)
       this.graph.container.addEventListener('wheel', (evt) => {
         if (evt.ctrlKey) {
           evt.preventDefault()
@@ -123,14 +123,14 @@ export default {
     }
   },
   activated() {
-    if (this.R.isNil(this.graph)) {
-      return
-    }
-    if (Object.is(0, this.oldScrollLeft) && Object.is(0, this.oldScrollTop)) {
-      this.graph.center()
-      return
-    }
-    this.graph.panGraph(-this.oldScrollLeft, -this.oldScrollTop)
+    // if (this.R.isNil(this.graph)) {
+    //   return
+    // }
+    // if (Object.is(0, this.oldScrollLeft) && Object.is(0, this.oldScrollTop)) {
+    //   this.graph.center()
+    //   return
+    // }
+    // this.graph.panGraph(-this.oldScrollLeft, -this.oldScrollTop)
   }
 }
 </script>

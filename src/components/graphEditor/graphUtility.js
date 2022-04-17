@@ -27,16 +27,21 @@ export function resetScrollbars(vueItem) {
     }
   }
 }
-
+/**
+ * 背景纸张尺寸in pixels
+ */
 export function getPageSize(vueItem) {
   return new MxRectangle(0, 0, vueItem.graph.pageFormat.width * vueItem.graph.view.scale, vueItem.graph.pageFormat.height * vueItem.graph.view.scale)
 }
-
+/**
+ * 计算内边距, (容器宽/高 -34)
+ * @returns 
+ */
 export function getPagePadding(vueItem) {
   return new MxPoint(Math.max(0, Math.round((vueItem.graph.container.offsetWidth - 34) / vueItem.graph.view.scale)),
     Math.max(0, Math.round((vueItem.graph.container.offsetHeight - 34) / vueItem.graph.view.scale)))
 }
-
+// 以纸张为单位的背景
 export function getPageLayout(vueItem) {
   let size = getPageSize(vueItem)
   let bounds = vueItem.graph.getGraphBounds()
@@ -44,12 +49,16 @@ export function getPageLayout(vueItem) {
   if (R.equals(bounds.width, 0) || R.equals(bounds.height, 0)) {
     return new MxRectangle(0, 0, 1, 1)
   }
+  // graph(左上角)相对背景(左上角)的坐标(大概)
   let x = Math.ceil(bounds.x / vueItem.graph.view.scale - vueItem.graph.view.translate.x)
   let y = Math.ceil(bounds.y / vueItem.graph.view.scale - vueItem.graph.view.translate.y)
+  // graph长宽
   let w = Math.floor(bounds.width / vueItem.graph.view.scale)
   let h = Math.floor(bounds.height / vueItem.graph.view.scale)
+  // 背景在左上方向扩大/缩小量(以纸张为单位)
   let x0 = Math.floor(x / size.width)
   let y0 = Math.floor(y / size.height)
+  // graph(右下角端点)相对背景原点(左上角)所在区间 - 左上方向扩大缩小量 >> graph长宽所需页数
   let w0 = Math.ceil((x + w) / size.width) - x0
   let h0 = Math.ceil((y + h) / size.height) - y0
 
@@ -103,7 +112,9 @@ export function lazyZoom(vueItem, zoomIn) {
     vueItem.updateZoomTimeout = null
   }, 10)
 }
-
+/**
+ * 注入画背景方法
+ */
 function createSvgGrid(vue, graphConfig) {
   vue.graph.view.createSvgGrid = function (color) {
     let tmpGridSize = this.graph.gridSize * this.scale
@@ -131,7 +142,10 @@ function createSvgGrid(vue, graphConfig) {
   }
 }
 
-
+/**
+ * 注入方法
+ * 重绘(大小/位置修正后的)背景
+ */
 function validateBackgroundStyles(vueItem, graphConfig) {
   vueItem.graph.view.validateBackgroundStyles = function () {
     let image = 'none'
@@ -176,7 +190,10 @@ function validateBackgroundStyles(vueItem, graphConfig) {
     }
   }
 }
-
+/**
+ * 注入方法
+ * 触发了一次点击...不知道在干吗...
+ */
 function validateBackgroundPage(vueItem) {
   vueItem.graph.view.validateBackgroundPage = function () {
     if (!R.isNil(this.graph.container)) {
@@ -213,7 +230,10 @@ function validateBackgroundPage(vueItem) {
     }
   }
 }
-
+/**
+ * 注入方法
+ * 计算修正后的背景bounds
+ */
 function getBackgroundPageBounds(vueItem) {
   vueItem.graph.view.getBackgroundPageBounds = function () {
     let layout = getPageLayout(vueItem)
@@ -227,7 +247,10 @@ function getBackgroundPageBounds(vueItem) {
       scale * layout.height * page.height)
   }
 }
-
+/**
+ * 依赖注入
+ * 重写原graph的sizeDidChange方法
+ */
 function sizeDidChange(vueItem) {
   vueItem.graph.sizeDidChange = function () {
     if (this.container && MxUtils.hasScrollbars(this.container)) {
@@ -260,6 +283,11 @@ function sizeDidChange(vueItem) {
   }
 }
 
+/**
+ * 依赖注入
+ * 重写原mxGraphView的validate方法
+ * 根据sizeDidChange里更新(注入)的view.x0和view.y0更新view.translate(背景偏移量)
+ */
 function validate(vueItem) {
   vueItem.graph.view.validate = function () {
     if (this.graph.container && MxUtils.hasScrollbars(this.graph.container)) {
@@ -273,12 +301,14 @@ function validate(vueItem) {
   }
 }
 
+// 我的结论是这个更新模式应该好好优化下...
+// 以减少额外的计算和函数的副作用
 const graphUtility = (vueItem) => {
-  createSvgGrid(vueItem, vueItem.graphConfig)
+  createSvgGrid(vueItem, vueItem.graphConfig) // 注入画背景方法
   validateBackgroundStyles(vueItem, vueItem.graphConfig)
   validateBackgroundPage(vueItem)
   getBackgroundPageBounds(vueItem)
-  sizeDidChange(vueItem)
+  sizeDidChange(vueItem) // 重写原graph的sizeDidChange方法
   validate(vueItem)
 }
 
