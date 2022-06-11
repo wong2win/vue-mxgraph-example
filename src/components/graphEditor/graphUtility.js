@@ -1,14 +1,12 @@
-import * as R from 'ramda'
-import base64Coder from 'Base64'
 import {
-  mxConstants as MxConstants,
-  mxEvent as MxEvent,
-  mxGraph as MxGraph,
-  mxGraphView as MxGraphView,
-  mxMouseEvent as MxMouseEvent,
-  mxRectangle as MxRectangle,
-  mxUtils as MxUtils,
-  mxPoint as MxPoint
+  mxConstants,
+  mxEvent,
+  mxGraph,
+  mxGraphView,
+  mxMouseEvent,
+  mxRectangle,
+  mxUtils,
+  mxPoint
 } from 'mxgraph/javascript/mxClient'
 
 export function resetScrollbars(vueItem) {
@@ -28,33 +26,83 @@ export function resetScrollbars(vueItem) {
   }
 }
 /**
- * 背景纸张尺寸in pixels
+ * 如果输入bounds有效, 则重置container滚动条使bounds区域居中
+ * 否则使背景与container左上角对齐
+ * 需bind(graph所在vue实例)使用
  */
-export function getPageSize(vueItem) {
-  return new MxRectangle(0, 0, vueItem.graph.pageFormat.width * vueItem.graph.view.scale, vueItem.graph.pageFormat.height * vueItem.graph.view.scale)
+ export function resetScrollbars_Gai(bounds) {
+  const container = this.graph.container,
+    pad = getPagePadding(this)
+  // 如果bounds面积不为0
+  if (bounds && bounds.width > 0 && bounds.height > 0) {
+    const AspectRatio_bounds = bounds.width / bounds.height,
+      AspectRatio_container = container.clientWidth / container.clientHeight
+    const alignByHeight = AspectRatio_container > AspectRatio_bounds
+    if (alignByHeight){
+      container.scrollTop = Math.floor(bounds.y)
+      container.scrollLeft = Math.floor(pad.x - (container.clientWidth - bounds.width) / 2)
+    }
+    else{
+      container.scrollTop = Math.floor(pad.y - (container.clientHeight - bounds.height) / 2)
+      container.scrollLeft = Math.floor(bounds.x)
+    }
+  }
+  else {
+    container.scrollTop = Math.floor(pad.y) - 1
+    container.scrollLeft = Math.floor(pad.x) - 1
+  }
 }
 /**
- * 计算内边距, (容器宽/高 -34)
+ * 根据当前scale缩放过的背景纸张尺寸in pixels
+ */
+ export function getScaledPageSize(vueItem) {
+  const scale = vueItem.graph.view.scale
+  return new mxRectangle(0, 0, vueItem.graph.pageFormat.width * scale, vueItem.graph.pageFormat.height * scale)
+}
+
+/**
+ * (scale = 1时)背景纸张尺寸in pixels
+ */
+export function getPageSize(vueItem) {
+  return new mxRectangle(0, 0, vueItem.graph.pageFormat.width, vueItem.graph.pageFormat.height)
+}
+
+/**
+ * 计算内边距, (容器宽/高 - 34)
  * @returns 
  */
 export function getPagePadding(vueItem) {
-  return new MxPoint(Math.max(0, Math.round((vueItem.graph.container.offsetWidth - 34) / vueItem.graph.view.scale)),
-    Math.max(0, Math.round((vueItem.graph.container.offsetHeight - 34) / vueItem.graph.view.scale)))
+  return new mxPoint(Math.max(0, Math.round(vueItem.graph.container.offsetWidth - 34)),
+    Math.max(0, Math.round(vueItem.graph.container.offsetHeight - 34)))
 }
-// 以纸张为单位的背景
-export function getPageLayout(vueItem) {
-  let size = getPageSize(vueItem)
-  let bounds = vueItem.graph.getGraphBounds()
 
-  if (R.equals(bounds.width, 0) || R.equals(bounds.height, 0)) {
-    return new MxRectangle(0, 0, 1, 1)
+/**
+ * (容器宽/高 - 34)/scale, /scale是为了抵消node_module里mxgraph的*scale操作  
+ * @returns 内边距/scale
+ */
+export function getPagePadding_d_scale(vueItem) {
+  const { container, view } = vueItem.graph
+  return new mxPoint(Math.max(0, Math.round((container.offsetWidth - 34) / view.scale)),
+    Math.max(0, Math.round((container.offsetHeight - 34) / view.scale)))
+}
+
+/**
+ * 计算以纸张长宽为单位的背景 
+ * @returns {mxRectangle} 背景画布长宽(页数)
+ */
+export function getPageLayout(vueItem) {
+  let size = getScaledPageSize(vueItem)
+  let bounds = vueItem.graph.getGraphBounds()
+  const { translate, scale } = vueItem.graph.view
+  if (bounds.width === 0 || bounds.height === 0) {
+    return new mxRectangle(0, 0, 1, 1)
   }
-  // graph(左上角)相对背景(左上角)的坐标(大概)
-  let x = Math.ceil(bounds.x / vueItem.graph.view.scale - vueItem.graph.view.translate.x)
-  let y = Math.ceil(bounds.y / vueItem.graph.view.scale - vueItem.graph.view.translate.y)
-  // graph长宽
-  let w = Math.floor(bounds.width / vueItem.graph.view.scale)
-  let h = Math.floor(bounds.height / vueItem.graph.view.scale)
+  // graph(左上角)相对背景(左上角)的坐标in pixels(大概)
+  let x = Math.ceil(bounds.x - translate.x * scale)
+  let y = Math.ceil(bounds.y - translate.y * scale)
+  // graph长宽in pixels
+  let w = Math.floor(bounds.width)
+  let h = Math.floor(bounds.height)
   // 背景在左上方向扩大/缩小量(以纸张为单位)
   let x0 = Math.floor(x / size.width)
   let y0 = Math.floor(y / size.height)
@@ -62,13 +110,14 @@ export function getPageLayout(vueItem) {
   let w0 = Math.ceil((x + w) / size.width) - x0
   let h0 = Math.ceil((y + h) / size.height) - y0
 
-  return new MxRectangle(x0, y0, w0, h0)
+  return new mxRectangle(x0, y0, w0, h0)
 }
 
 export function lazyZoom(vueItem, zoomIn) {
-  if (vueItem.updateZoomTimeout !== null) {
-    window.clearTimeout(vueItem.updateZoomTimeout)
-  }
+  // if (vueItem.updateZoomTimeout !== undefined) {}
+  // 取消上一个setTimeout, 累积缩放比例
+  window.clearTimeout(vueItem.updateZoomTimeout)
+  
   const zoomFactor = vueItem.graph.zoomFactor
   const scale = vueItem.graph.view.scale
 
@@ -90,11 +139,12 @@ export function lazyZoom(vueItem, zoomIn) {
     }
   }
   cumulativeZoomFactor = Math.max(0.01, Math.min(scale * cumulativeZoomFactor, 160) / scale)
+  // 实施缩放, 及重置滚动条位置
   vueItem.updateZoomTimeout = window.setTimeout(() => {
-    const offset = MxUtils.getOffset(vueItem.graph.container)
+    const offset = mxUtils.getOffset(vueItem.graph.container)
     let dx = 0
     let dy = 0
-
+    // 缩放前缓存鼠标距离container中心的偏移量(像素)
     if (vueItem.cursorPosition !== null) {
       dx = vueItem.graph.container.offsetWidth / 2 - vueItem.cursorPosition.x + offset.x
       dy = vueItem.graph.container.offsetHeight / 2 - vueItem.cursorPosition.y + offset.y
@@ -103,15 +153,16 @@ export function lazyZoom(vueItem, zoomIn) {
 
     vueItem.graph.zoom(cumulativeZoomFactor)
     const s = vueItem.graph.view.scale
+    // 如防抖后的缩放比例有变化, 根据上述偏移量重置滚动条位置
     if (s !== prev) {
-      if (MxUtils.hasScrollbars(vueItem.graph.container) && (dx !== 0 || dy !== 0)) {
+      if (mxUtils.hasScrollbars(vueItem.graph.container) && (dx !== 0 || dy !== 0)) {
         vueItem.graph.container.scrollLeft -= dx * (cumulativeZoomFactor - 1)
         vueItem.graph.container.scrollTop -= dy * (cumulativeZoomFactor - 1)
       }
     }
-    vueItem.updateZoomTimeout = null
   }, 10)
 }
+
 /**
  * 注入画背景方法
  */
@@ -124,13 +175,13 @@ function createSvgGrid(vue, graphConfig) {
     }
     const tmpGridStep = graphConfig.gridSteps * tmpGridSize
     const size = tmpGridStep
-    const d = R.map((index) => {
-      const size = index * tmpGridSize
+    const d = Array.from({length: graphConfig.gridSteps - 1}).map((_, index) => {
+      const size = (index + 1) * tmpGridSize
 
       return `M 0 ${size} L ${tmpGridStep} ${size} M ${size} 0 L ${size} ${tmpGridStep}`
-    }, R.range(1, graphConfig.gridSteps))
+    })
 
-    return `<svg width="${size}" height="${size}" xmlns="${MxConstants.NS_SVG}">
+    return `<svg width="${size}" height="${size}" xmlns="${mxConstants.NS_SVG}">
                 <defs>
                     <pattern id="grid" width="${tmpGridStep}" height="${tmpGridStep}" patternUnits="userSpaceOnUse">
                         <path d="${d.join(' ')}" fill="none" stroke="${color}" opacity="0.2" stroke-width="1"/>
@@ -152,29 +203,29 @@ function validateBackgroundStyles(vueItem, graphConfig) {
     let position = ''
     if (this.graph.isGridEnabled()) {
       image = unescape(encodeURIComponent(this.createSvgGrid(graphConfig.gridColor)))
-      image = base64Coder.btoa(image, true)
+      image = btoa(image, true)
       image = `url(data:image/svg+xml;base64,${image})`
       let phase = this.graph.gridSize * this.scale * graphConfig.gridSteps
       let x0 = 0
       let y0 = 0
 
-      if (!R.isNil(this.backgroundPageShape)) {
+      if (this.backgroundPageShape) {
         let bds = this.getBackgroundPageBounds()
 
         x0 = 1 + bds.x
         y0 = 1 + bds.y
       }
-      position = -Math.round(phase - MxUtils.mod(this.translate.x * this.scale - x0, phase)) + 'px ' +
-        -Math.round(phase - MxUtils.mod(this.translate.y * this.scale - y0, phase)) + 'px'
+      position = -Math.round(phase - mxUtils.mod(this.translate.x * this.scale - x0, phase)) + 'px ' +
+        -Math.round(phase - mxUtils.mod(this.translate.y * this.scale - y0, phase)) + 'px'
     }
     let canvas = this.canvas
 
-    if (!R.isNil(canvas.ownerSVGElement)) {
+    if (canvas.ownerSVGElement) {
       canvas = canvas.ownerSVGElement
     }
     let tmpGridBackgroundColor = graphConfig.gridBackgroundEnabled ? graphConfig.gridBackgroundColor : '#FFF'
 
-    if (!R.isNil(this.backgroundPageShape)) {
+    if (this.backgroundPageShape) {
       this.backgroundPageShape.node.style.backgroundRepeat = 'repeat'
       this.backgroundPageShape.node.style.backgroundPosition = position
       this.backgroundPageShape.node.style.backgroundImage = image
@@ -190,34 +241,35 @@ function validateBackgroundStyles(vueItem, graphConfig) {
     }
   }
 }
+
 /**
  * 注入方法
  * 触发了一次点击...不知道在干吗...
  */
 function validateBackgroundPage(vueItem) {
   vueItem.graph.view.validateBackgroundPage = function () {
-    if (!R.isNil(this.graph.container)) {
+    if (this.graph.container) {
       let bounds = this.getBackgroundPageBounds()
 
-      if (R.isNil(this.backgroundPageShape)) {
+      if (! this.backgroundPageShape) {
         let firstChild = this.graph.container.querySelector('svg')
 
         if (firstChild !== null) {
           this.backgroundPageShape = this.createBackgroundPageShape(bounds)
           this.backgroundPageShape.scale = 1
-          this.backgroundPageShape.dialect = MxConstants.DIALECT_STRICTHTML
+          this.backgroundPageShape.dialect = mxConstants.DIALECT_STRICTHTML
           this.backgroundPageShape.init(this.graph.container)
           firstChild.style.position = 'absolute'
           this.graph.container.insertBefore(this.backgroundPageShape.node, firstChild)
           this.backgroundPageShape.redraw()
           this.backgroundPageShape.node.className = 'geBackgroundPage'
 
-          MxEvent.addGestureListeners(this.backgroundPageShape.node,
-            MxUtils.bind(this, (evt) => {
-              this.graph.fireMouseEvent(MxEvent.MOUSE_DOWN, new MxMouseEvent(evt))
+          mxEvent.addGestureListeners(this.backgroundPageShape.node,
+            mxUtils.bind(this, (evt) => {
+              this.graph.fireMouseEvent(mxEvent.MOUSE_DOWN, new mxMouseEvent(evt))
             }),
-            MxUtils.bind(this, (evt) => {
-              this.graph.fireMouseEvent(MxEvent.MOUSE_UP, new MxMouseEvent(evt))
+            mxUtils.bind(this, (evt) => {
+              this.graph.fireMouseEvent(mxEvent.MOUSE_UP, new mxMouseEvent(evt))
             })
           )
         }
@@ -230,6 +282,7 @@ function validateBackgroundPage(vueItem) {
     }
   }
 }
+
 /**
  * 注入方法
  * 计算修正后的背景bounds
@@ -237,48 +290,67 @@ function validateBackgroundPage(vueItem) {
 function getBackgroundPageBounds(vueItem) {
   vueItem.graph.view.getBackgroundPageBounds = function () {
     let layout = getPageLayout(vueItem)
-    let page = getPageSize(vueItem)
-    let scale = this.scale
-    let translate = this.translate
+    let page = getScaledPageSize(vueItem)
+    let { scale, translate } = this
 
-    return new MxRectangle(scale * (translate.x + layout.x * page.width),
-      scale * (translate.y + layout.y * page.height),
-      scale * layout.width * page.width,
-      scale * layout.height * page.height)
+    return new mxRectangle(translate.x * scale + layout.x * page.width,
+      translate.y * scale + layout.y * page.height,
+      layout.width * page.width,
+      layout.height * page.height)
   }
 }
+
 /**
  * 依赖注入
  * 重写原graph的sizeDidChange方法
  */
 function sizeDidChange(vueItem) {
   vueItem.graph.sizeDidChange = function () {
-    if (this.container && MxUtils.hasScrollbars(this.container)) {
+    if (this.container && mxUtils.hasScrollbars(this.container)) {
+      const scale = this.view.scale
       let pages = getPageLayout(vueItem)
-      let pad = getPagePadding(vueItem)
+      let pad = getPagePadding_d_scale(vueItem)
+      // 怀疑这缩放部分根本就不是一个人写的...几个人没就什么时候*scale达成一致, 以至于都不知道*过几次scale
+      // 最诡异的是用那个EditorUI创建的mxGraph缩放和滚动条居然是正常可用的...
+      // 之前size是乘过一次scale的数据
       let size = getPageSize(vueItem)
+      // 但后续apply里还会再乘一次scale, 故此处改用未scaled的size, pad同理
       let minW = Math.ceil(2 * pad.x + pages.width * size.width)
       let minH = Math.ceil(2 * pad.y + pages.height * size.height)
+      /**
+       * 重置this.minimumGraphSize, 在原sizeDidChange中重置画布长宽会再乘以scale  
+       * node_modules\mxgraph\javascript\mxClient.js\sizeDidChange  
+       * 第57966行  
+       * ```
+       * if (this.minimumGraphSize != null) {
+       *   width = Math.max(width, this.minimumGraphSize.width * this.view.scale);
+       *   height = Math.max(height, this.minimumGraphSize.height * this.view.scale);
+       * }
+       * ```
+       * 这变量名和最后直接乘scale就很怪, 合理怀疑此处是滥用以前的API勉强实现重置大小
+       */
       let min = this.minimumGraphSize
-
-      if (R.isNil(min) || !R.equals(min.width, minW) || !R.equals(min.height, minH)) {
-        this.minimumGraphSize = new MxRectangle(0, 0, minW, minH)
+      if (!min || min.width !== minW || min.height !== minH) {
+        this.minimumGraphSize = new mxRectangle(0, 0, minW, minH)
       }
-      let dx = pad.x - pages.x * size.width
-      let dy = pad.y - pages.y * size.height
+      // Updates auto-translate to include padding and graph size
+      let dx = pad.x - pages.x * size.width * scale
+      let dy = pad.y - pages.y * size.height * scale
 
-      if (!R.equals(this.view.translate.x, dx) || !R.equals(this.view.translate.y, dy)) {
+      if (!this.autoTranslate && (this.view.translate.x !== dx || this.view.translate.y !== dy)) {
         let tx = this.view.translate.x
         let ty = this.view.translate.y
 
         this.view.x0 = pages.x
         this.view.y0 = pages.y
-        this.view.setTranslate(dx, dy)
+        this.autoTranslate = true
+        this.view.setTranslate(dx, dy) // SETTING THE TRANSLATE TRIGGERS A REVALIDATION.
+        this.autoTranslate = false
         this.container.scrollLeft += Math.round((dx - tx) * this.view.scale)
         this.container.scrollTop += Math.round((dy - ty) * this.view.scale)
         return
       }
-      MxGraph.prototype.sizeDidChange.apply(this, arguments)
+      mxGraph.prototype.sizeDidChange.apply(this, arguments)
     }
   }
 }
@@ -290,14 +362,14 @@ function sizeDidChange(vueItem) {
  */
 function validate(vueItem) {
   vueItem.graph.view.validate = function () {
-    if (this.graph.container && MxUtils.hasScrollbars(this.graph.container)) {
-      const pad = getPagePadding(vueItem)
-      const size = getPageSize(vueItem)
+    if (this.graph.container && mxUtils.hasScrollbars(this.graph.container)) {
+      const pad = getPagePadding_d_scale(vueItem)
+      const size = getScaledPageSize(vueItem)
 
       this.translate.x = pad.x - (this.x0 || 0) * size.width
       this.translate.y = pad.y - (this.y0 || 0) * size.height
     }
-    MxGraphView.prototype.validate.apply(this, arguments)
+    mxGraphView.prototype.validate.apply(this, arguments)
   }
 }
 
